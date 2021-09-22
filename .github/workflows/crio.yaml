@@ -1,0 +1,64 @@
+name: crio
+
+on:
+  schedule:
+    - cron: "0 1 * * *"
+  workflow_dispatch:
+
+env:
+  KIND_IMAGE: "kindest/node"
+  KIND_VERSION: "1.21"
+  KIND_MINOR: "1"
+  CRIO_VERSION: "1.21"
+  CRIO_OS: "xUbuntu_21.04"
+
+jobs:
+  crio:
+    name: crio
+    runs-on: ubuntu-20.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Build kind image
+        run: |
+          docker build -t fromanirh/kindnode:latest -f Dockerfile.cri-o \
+            --build-arg KIND_IMAGE=${{ env.KIND_IMAGE }}     \
+            --build-arg KIND_VERSION=${{ env.KIND_VERSION }} \
+            --build-arg KIND_MINOR=${{ env.KIND_MINOR }}     \
+            --build-arg CRIO_VERSION=${{ env.CRIO_VERSION }} \
+            --build-arg CRIO_OS=${{ env.CRIO_OS }}           \
+            .
+
+      - name: Create multi node cluster
+        run: |
+          kind create cluster -v7 --wait 1m --retain --config=kind-crio.yaml --image=fromanirh/kindnode:latest
+
+      - name: Get Cluster status
+        run: |
+          # wait network is ready
+          kubectl wait --for=condition=ready pods --namespace=kube-system -l k8s-app=kube-dns
+          kubectl get nodes -o wide
+          kubectl get pods -A
+          # Check everything is fine
+          kubectl rollout status daemonset -n kube-system kindnet --timeout=200s
+          kubectl get nodes -o wide
+          kubectl get pods -A
+
+      - name: Export logs
+        if: always()
+        run: |
+          mkdir -p /tmp/kind/logs
+          kind export logs /tmp/kind/logs
+          sudo chown -R $USER:$USER /tmp/kind/logs
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v2
+        with:
+          name: kind-logs-${{ env.JOB_NAME }}-${{ github.run_id }}
+          path: /tmp/kind/logs
+
+      - name: Delete cluster
+        run: kind delete cluster
