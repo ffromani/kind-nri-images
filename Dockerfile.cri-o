@@ -27,16 +27,16 @@ RUN git clone https://github.com/klihub/nri $GOPATH/src/github.com/nri/nri && \
     git checkout proto/draft && \
     make build && \
     make install-ttrpc-plugin && \
-    mkdir /nri && \
-    cp bin/logger /nri/ && \
-    cp bin/logger /nri/log-all && \
-    cp bin/logger /nri/log-container
+    mkdir -p /nri/bin && \
+    cp bin/logger /nri/bin/ && \
+    cp bin/logger /nri/bin/log-all && \
+    cp bin/logger /nri/bin/log-container
 RUN git clone https://github.com/klihub/cri-o $GOPATH/src/github.com/cri-o/cri-o && \
     cd $GOPATH/src/github.com/cri-o/cri-o && \
     git checkout proto/nri && \
     make && make install PREFIX=/out/ && \
-    mkdir /out/etc && \
-    cp -rv contrib/nri/etc/nri /out/etc
+    mkdir -p /nri/etc/nri && \
+    cp -a contrib/nri/etc/nri/* /nri/etc/nri/
 
 # build CRI-O enabled kind image AND replace the binaries with the NRI-enabled ones
 FROM ${KIND_IMAGE}:v${KIND_VERSION}.${KIND_MINOR}
@@ -59,7 +59,9 @@ RUN echo "Installing cri-o" \
     && ln -s /usr/libexec/podman/conmon /usr/local/bin/conmon \
     && printf "[crio.runtime]\ncgroup_manager=\"cgroupfs\"\nconmon_cgroup=\"pod\"\n" > /etc/crio/crio.conf \
     && sed -i 's/containerd/crio/g' /etc/crictl.yaml
-RUN mkdir -p /opt/nri/bin
+RUN mkdir -p /opt/nri/bin && \
+    mkdir -p /etc/nri
 COPY --from=cri-o-dev /out/bin/cri* /usr/local/bin/
-COPY --from=cri-o-dev /nri/* /opt/nri/bin/
+COPY --from=cri-o-dev /nri/bin/* /opt/nri/bin/
+COPY --from=cri-o-dev /nri/etc/nri/ /etc/nri/
 RUN systemctl disable containerd && systemctl enable crio
