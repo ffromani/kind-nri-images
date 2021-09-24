@@ -2,7 +2,7 @@ name: crio
 
 on:
   schedule:
-    - cron: "0 1 * * *"
+    - cron: "0 0 * * SUN"
   workflow_dispatch:
 
 env:
@@ -23,7 +23,7 @@ jobs:
 
       - name: Build kind image
         run: |
-          docker build -t fromanirh/kindnode:latest -f Dockerfile.cri-o \
+          docker build -t fromani/kindnode:latest -f Dockerfile.cri-o \
             --build-arg KIND_IMAGE=${{ env.KIND_IMAGE }}     \
             --build-arg KIND_VERSION=${{ env.KIND_VERSION }} \
             --build-arg KIND_MINOR=${{ env.KIND_MINOR }}     \
@@ -33,7 +33,7 @@ jobs:
 
       - name: Create multi node cluster
         run: |
-          kind create cluster -v7 --wait 1m --retain --config=kind-crio.yaml --image=fromanirh/kindnode:latest
+          kind create cluster -v7 --wait 1m --retain --config=kind-crio.yaml --image=fromani/kindnode:latest
 
       - name: Get Cluster status
         run: |
@@ -45,6 +45,19 @@ jobs:
           kubectl rollout status daemonset -n kube-system kindnet --timeout=200s
           kubectl get nodes -o wide
           kubectl get pods -A
+
+      - name: Login to Quay.io
+        uses: docker/login-action@v1
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_IO_USERNAME }}
+          password: ${{ secrets.QUAY_IO_ROBOTOKEN }}
+
+      - name: Publish image
+        run: |
+          timestamp=$(date +%Y%m%d)
+          docker tag fromani/kindnode:latest quay.io/fromani/kind-nri-images:crio${timestamp}
+          docker push quay.io/fromani/kind-nri-images:crio${timestamp}
 
       - name: Export logs
         if: always()
